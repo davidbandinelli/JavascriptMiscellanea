@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RogueLike</title>
+    <style>
+        body {
+        font-family: "Courier New", Courier, monospace;
+        } 
+    </style>
+  </head>
+  <body>
+  <!-- canvas id="myCanvasTag" width="400" height="400" style="background-color:blue;border: 10px yellow solid"></canvas -->
+    
+    <div id="divOutput"></div>
+    <div id="divPlayer"></div><br />
+    <div id="divCombat"></div><br />
+    <!-- input type="text" id="kInput" -->
+    <script type="text/javascript">
+        // ----------------------------------------------------------
+        // --------------- Javascript RogueLike ---------------------
+        // --------------- by pupazzo1972   -------------------------
+        // ----------------------------------------------------------
+        var UPDATING = false;
+        var PAUSE = false;
+		var GAME_SPEED = 100;
+        // R (&#9658;) L (&#9668;) U (&#9650;) D (&#9660;), mushroom (&#1f344)
+        // helper functions
+        function random(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        
+        // event.type must be keypress
+        function getChar(event) {
+            if (event.which == null) {
+                return String.fromCharCode(event.keyCode) // IE
+            } else if (event.which != 0 && event.charCode != 0) {
+                return String.fromCharCode(event.which)   // the rest
+            } else {
+                return null // special key
+            }
+        }
+        // helper functions
+        
+        function print_debug() {
+            cmdQueue.commands.forEach(function(item) {
+                if (item.orientation != undefined) {
+                    console.log("change dir to " + item.orientation + " at X=" + item.X + ",Y=" + item.Y + ",SEGM=" + item.nrSegments);
+                }
+            });
+        }
+        
+        function khandle(e) {
+			var keyPressed = getChar(e);
+			//alert(keyPressed);
+			switch (keyPressed) {
+				case 'w':
+					updatePlayfield("U");
+					break;
+				case 's':
+					updatePlayfield("D");
+					break;
+				case 'a':
+					updatePlayfield("L");
+					break;
+				case 'd':
+					updatePlayfield("R");
+					break;
+				// hit an enemy
+				case 'h':
+					updatePlayfield("H");
+					break;
+				case 'p':
+					if (PAUSE == true) {
+						UPDATING = false;
+						PAUSE = false;
+					}
+					if (PAUSE == false) {
+						UPDATING = true;
+						PAUSE = true;
+						print_debug();
+					}
+					break;
+			}
+			playfield.draw();
+        }
+        
+        function updatePlayfield(action) {
+            UPDATING = true;
+			player.isFighting = false;
+			player.monsterInCombat = -1;
+
+			// movement
+			var prevX = player.X;
+            var prevY = player.Y;
+            switch (action) {
+                case "U":
+                    validDir = true;
+                    player.X = player.X - 1;
+                    break;
+                case "D":
+                    validDir = true;
+                    player.X = player.X + 1;
+                    break;
+                case "L":
+                    validDir = true;
+                    player.Y = player.Y - 1;
+                    break;
+                case "R":
+                    validDir = true;
+                    player.Y = player.Y + 1;
+                    break;
+            }
+            // boundary check
+            var outOfBound = false;
+            if (player.Y < 0) {
+                player.Y = 0;
+                outOfBound = true;
+            }
+            if (player.X < 0) {
+                player.X = 0;
+                outOfBound = true;
+            }
+            if (player.Y >= playfield.Y) {
+                player.Y = playfield.Y - 1;
+                outOfBound = true;
+            }
+            if (player.X >= playfield.X) {
+                player.X = playfield.X - 1;
+                outOfBound = true;
+            }
+            if (outOfBound) {
+                //console.log("OUT-OF-BOUND head coord X=" + snk.segments[0].X + ",Y=" + snk.segments[0].Y);
+            }
+            // check if player is in room or corridor
+			if (!CheckValidMove()) {
+				player.X = prevX;
+				player.Y = prevY;
+			}
+
+			// combat action
+			if (action == "H") {
+				// if enemy is in range (melee = 1)
+				var enemyInRange = CheckEnemyInRange();
+				if (enemyInRange != -1) {
+					player.isFighting = true;
+					player.monsterInCombat = enemyInRange;
+					ResolveCombatMove("H", enemyInRange);
+					// resolve combat move and set combat message
+				} 
+			}
+			
+            //DEBUG
+            UPDATING = false;
+        }
+
+		// resolve combat move
+		function ResolveCombatMove(combatMove, enemyIndex) {
+			var hitChance = random(1, 100);
+			var outputMsg = "";
+			// TODO: consider enemy DEX + player DEX
+			if (hitChance > ((50 - playfield.monsters[enemyIndex].DEX) + player.DEX)) {
+				// player hit
+				outputMsg += "Player HIT "
+				var damage = random(1, player.STR);
+				outputMsg += "for " + damage + " damage ...";
+				playfield.monsters[enemyIndex].HP -= damage;
+				if (playfield.monsters[enemyIndex].HP < 0) {
+					playfield.monsters[enemyIndex].HP = 0;
+				}
+				outputMsg += "enemy has " + playfield.monsters[enemyIndex].HP + " HP left ...";
+				if (playfield.monsters[enemyIndex].HP <= 0) {
+					outputMsg += " enemy is DEAD ! ";
+					playfield.monsters[enemyIndex].alive = false;
+				}
+			} else {
+				outputMsg += "Player MISS "
+			}
+			player.combatMessage = outputMsg;
+		}
+		
+		// enemy is in range for combat
+		function CheckEnemyInRange() {
+			var isEnemyInRange = -1;
+			for (var m = 0; m < playfield.numberOfMonsters; m++) {
+				if ( (Math.abs((playfield.monsters[m].X - player.X)) == 1 || Math.abs((playfield.monsters[m].Y - player.Y)) == 1) && playfield.monsters[m].alive === true ) {
+					isEnemyInRange = m;
+				}
+			}
+			return isEnemyInRange;
+		}
+		
+		// player can move only in rooms and corridors
+		function CheckValidMove() {
+			var isValidMove = false;
+			for (var k = 0; k < playfield.numberOfCorridors; k++) {
+				for (var z = 0; z < playfield.corridors[k].length; z++) {
+					if ((playfield.corridors[k][z].X === player.X && playfield.corridors[k][z].Y === player.Y)) {
+						isValidMove = true;
+					}
+				}
+			}
+			for (var i = 0; i < playfield.numberOfRooms; i++) {
+				// player is inside a room
+				if ((player.Y > playfield.rooms[i].topLVertexY && player.Y < playfield.rooms[i].bottomRVertexY) && (player.X > playfield.rooms[i].topLVertexX && player.X < playfield.rooms[i].topRVertexX)) {
+					isValidMove = true;
+				}
+				// player is on a wall connected to a corridor
+				// vertical walls
+				if ((player.X > playfield.rooms[i].topLVertexX && player.X < playfield.rooms[i].topRVertexX) && (player.Y == playfield.rooms[i].topLVertexY || player.Y == playfield.rooms[i].bottomRVertexY)) {
+					isValidMove = true;
+				}
+				// horizontal walls
+				if ((player.Y > playfield.rooms[i].topLVertexY && player.Y < playfield.rooms[i].bottomRVertexY) && (player.X == playfield.rooms[i].topLVertexX || player.X == playfield.rooms[i].topRVertexX)) {
+					isValidMove = true;
+				}
+			}
+			for (var m = 0; m < playfield.numberOfMonsters; m++) {
+				if ((playfield.monsters[m].X === player.X && playfield.monsters[m].Y === player.Y)) {
+					isValidMove = false;
+				}
+			}
+			
+			return isValidMove;
+		}
+		
+        var room = {
+            W: 4,
+            H: 4,
+            topVertexX: 0,
+            topVertexY: 0,
+            bottomVertexX: 0,
+            bottomVertexY: 0,
+			floor: 1,
+            PrintCurrentPos: function () {
+                alert("current X=" + this.topVertexX + ",current Y=" + this.topVertexY);
+            }
+        }
+        
+		function Point(x, y) {
+			this.X = x;
+			this.Y = y;
+		}
+		
+        var playfield = {
+            score: 0,
+            X: 48,
+            Y: 128,
+			rooms: [
+                // rooms array here
+            ],
+			corridors: [
+                // corridors array here
+            ],
+			monsters: [
+                // monsters array here
+			],
+			numberOfRooms: 0,
+			numberOfCorridors: 0,
+			numberOfMonsters: 0,
+            initialize: function() {
+				// TODO:
+				// room random generator (no overlap)
+				// corridors between rooms (1-4 corridors)
+				this.rooms.push({ topLVertexX: 20, topLVertexY: 20, topRVertexX: 24, topRVertexY: 20, bottomLVertexX: 20, bottomLVertexY: 24, bottomRVertexX: 24, bottomRVertexY: 24 });
+				this.rooms.push({ topLVertexX: 40, topLVertexY: 40, topRVertexX: 46, topRVertexY: 40, bottomLVertexX: 40, bottomLVertexY: 46, bottomRVertexX: 46, bottomRVertexY: 46 });
+				this.rooms.push({ topLVertexX: 10, topLVertexY: 60, topRVertexX: 18, topRVertexY: 60, bottomLVertexX: 10, bottomLVertexY: 76, bottomRVertexX: 18, bottomRVertexY: 76 });
+				this.rooms.push({ topLVertexX: 30, topLVertexY: 90, topRVertexX: 42, topRVertexY: 90, bottomLVertexX: 30, bottomLVertexY: 110, bottomRVertexX: 42, bottomRVertexY: 110 });
+				this.numberOfRooms = this.rooms.length;
+				
+				this.CreateCorridor(20, 20, 5, 5, 40, 40, 7, 7); // from 1 to 2
+				this.CreateCorridor(10, 60, 17, 9, 40, 40, 7, 7); // from 2 to 3
+				this.CreateCorridor(10, 60, 17, 9, 30, 90, 21, 13); // from 3 to 4
+				this.numberOfCorridors = this.corridors.length;
+				
+				// initialize enemies
+				this.monsters.push({ symbol: 'G', descr: "Goblin", HP: 10, STR: 3, MAG: 0, DEX: 7, X: 14, Y: 65, XP: 5, room: 2, alive: true });
+				this.monsters.push({ symbol: 'K', descr: "Kobold", HP: 8, STR: 2, MAG: 0, DEX: 8, X: 16, Y: 68, XP: 6, room: 2, alive: true });
+				this.numberOfMonsters = this.monsters.length;
+
+				player.initialize();
+            },
+			DrawLine: function(startX, startY, endX, endY) {
+				var p = 0;
+				Segment = new Array();
+				if (endX > startX) {
+					for (x = startX; x <= endX; x++) {
+						Segment[p] = new Point();
+						Segment[p].X = x;
+						Segment[p].Y = startY;
+						p++;
+					}
+					this.corridors.push(Segment);
+					return;
+				} 
+				if (startX > endX) {
+					for (x = startX; x >= endX; x--) {
+						Segment[p] = new Point();
+						Segment[p].X = x;
+						Segment[p].Y = startY;
+						p++;
+					}
+					this.corridors.push(Segment);
+					return;
+				} 
+				if (endY > startY) {
+					for (y = startY; y < endY; y++) {
+						Segment[p] = new Point();
+						Segment[p].X = startX;
+						Segment[p].Y = y;
+						p++;
+					}
+					this.corridors.push(Segment);
+					return;
+				} 
+				if (startY > endY) {
+					for (y = startY; y > endY; y--) {
+						Segment[p] = new Point();
+						Segment[p].X = startX;
+						Segment[p].Y = y;
+						p++;
+					}
+					this.corridors.push(Segment);
+					return;
+				} 
+			},
+			CreateCorridor: function(x1, y1, w1, h1, x2, y2, w2, h2) {
+				var orientation = "";
+				var wall1 = "";
+				var wall2 = "";
+				if (y1 + w1 < y2 || y2 + w2 < y1) {
+					orientation = "H";
+					//alert("horizontal");
+					if (y1 > y2) {
+						//alert("left wall");
+						wall1 = "L";
+						wall2 = "R";
+					} else {
+						//alert("right wall");
+						wall1 = "R";
+						wall2 = "L";
+					}
+				} else {
+					if (x1 + h1 < x2 || x2 + h2 < x1) {
+						//alert("vertical");
+						orientation = "V";
+						if (x1 > x2) {
+							//alert("upper wall");
+							wall1 = "U";
+							wall2 = "D";
+						} else {
+							//alert("lower wall");
+							wall1 = "D";
+							wall2 = "U";
+						}
+					}
+				}
+				//alert(orientation + wall1 + wall2);
+				// 1. choose starting point in each wall of each room
+				var startX1 = 0, startY1 = 0;
+				var startX2 = 0, startY2 = 0;
+				var middleX1 = 0, middleY1 = 0;
+				var middleX2 = 0, middleY2 = 0;
+				if (orientation == "H" && wall1 == "L") {
+					startX1 = x1 + 1;
+					startY1 = y1 - 1;
+					startX2 = x2 + 1;
+					startY2 = y2 + w2;
+					//alert(orientation + wall1 + wall2 + ",X1=" + startX1 + ",Y1=" + startY1 + ",X2=" + startX2 + ",Y2=" + startY2);
+					middleY1 = startY1 - ((startY1 - startY2) / 2);
+					middleX1 = startX1;
+					middleY2 = middleY1;
+					middleX2 = startX2;
+				}
+				if (orientation == "H" && wall1 == "R") {
+					startX1 = x1 + 1;
+					startY1 = y1 + w1;
+					startX2 = x2 + 1;
+					startY2 = y2 - 1;
+					//alert(orientation + wall1 + wall2 + ",X1=" + startX1 + ",Y1=" + startY1 + ",X2=" + startX2 + ",Y2=" + startY2);
+					middleY1 = startY1 + ((startY2 - startY1) / 2);
+					middleX1 = startX1;
+					middleY2 = middleY1;
+					middleX2 = startX2;
+					//alert("middleX1=" + middleX1 + ",middleY1=" + middleY1);
+					//alert("middleX2=" + middleX2 + ",middleY2=" + middleY2);
+						
+				}
+				if (orientation == "V" && wall1 == "U") {
+					startX1 = x1 - 1;
+					startY1 = y1 + 1;
+					startX2 = x2 + h2;
+					startY2 = y2 + 1;
+					//alert(orientation + wall1 + wall2 + ",X1=" + startX1 + ",Y1=" + startY1 + ",X2=" + startX2 + ",Y2=" + startY2);
+					middleY1 = startY1;
+					middleX1 = startX1 - ((startX2 - startX1) / 2);
+					middleY2 = middleY1;
+					middleX2 = middleX1;
+				}
+				if (orientation == "V" && wall1 == "D") {
+					startX1 = x1 + h1;
+					startY1 = y1 + 1;
+					startX2 = x2 - 1;
+					startY2 = y2 + 1;
+					//alert(orientation + wall1 + wall2 + ",X1=" + startX1 + ",Y1=" + startY1 + ",X2=" + startX2 + ",Y2=" + startY2);
+					middleY1 = startY1;
+					middleX1 = startX1 + ((startX2 - startX1) / 2);
+					middleY2 = middleY1;
+					middleX2 = middleX1;
+				}
+				// 2. draw to middle point
+				//alert("Draw from startX1=" + startX1 + ", startY1=" + startY1 + " to middleX1=" + middleX1 + ",middleY1=" + middleY1);
+				this.DrawLine(startX1, startY1, middleX1, middleY1);
+				//alert("Draw from startX2=" + startX2 + ", startY2=" + startY2 + " to middleX2=" + middleX2 + ",middleY2=" + middleY2);
+				this.DrawLine(startX2, startY2, middleX2, middleY2);
+				
+				// 3. connect middle points
+				this.DrawLine(middleX1, middleY1, middleX2, middleY2);
+			},
+            draw: function() {
+                var output = "";
+                output += "|";
+                for (var y = 0; y < this.Y; y++) {
+                    output += "-";
+                }
+                output += "|<br />";
+                for (var x = 0; x < this.X; x++) {
+                    output += "|";
+                    for (var y = 0; y < this.Y; y++) {
+                        // draw the background or object
+                        var flgDrawBg = true;
+						// draw player
+						if ((x == player.X && y == player.Y)) {
+							flgDrawBg = false;
+							output += "P";
+						}
+						// draw monsters
+						if (flgDrawBg) {
+							for (var m = 0; m < this.numberOfMonsters; m++) {
+								if ((this.monsters[m].X === x && this.monsters[m].Y === y && this.monsters[m].alive === true)) {
+									flgDrawBg = false;
+									output += this.monsters[m].symbol;
+								}
+								if ((this.monsters[m].X === x && this.monsters[m].Y === y && this.monsters[m].alive === false)) {
+									flgDrawBg = false;
+									output += "X";
+								}
+							}
+						}
+						// draw rooms
+						if (flgDrawBg) {
+							for (var i = 0; i < this.numberOfRooms; i++) {
+								// draw vertixes
+								if ((x == this.rooms[i].topLVertexX && y == this.rooms[i].topLVertexY) ||
+								    (x == this.rooms[i].topRVertexX && y == this.rooms[i].topRVertexY) ||
+									(x == this.rooms[i].bottomLVertexX && y == this.rooms[i].bottomLVertexY) ||
+									(x == this.rooms[i].bottomRVertexX && y == this.rooms[i].bottomRVertexY)) {
+									flgDrawBg = false;
+									output += "+";
+								}
+								// vertical walls
+								if ((x > this.rooms[i].topLVertexX && x < this.rooms[i].topRVertexX) && (y == this.rooms[i].topLVertexY || y == this.rooms[i].bottomRVertexY)) {
+									flgDrawBg = false;
+									output += "|";
+								}
+								// horizontal walls
+								if ((y > this.rooms[i].topLVertexY && y < this.rooms[i].bottomRVertexY) && (x == this.rooms[i].topLVertexX || x == this.rooms[i].topRVertexX)) {
+									flgDrawBg = false;
+									output += "-";
+								}
+								// inside the room
+								if ((y > this.rooms[i].topLVertexY && y < this.rooms[i].bottomRVertexY) && (x > this.rooms[i].topLVertexX && x < this.rooms[i].topRVertexX)) {
+									flgDrawBg = false;
+									output += ".";
+								}
+							}
+						}
+						// draw corridors
+						if (flgDrawBg) {
+							//alert(this.numberOfCorridors);
+							for (var k = 0; k < this.numberOfCorridors; k++) {
+								//alert(this.corridors[k].length);
+								for (var z = 0; z < this.corridors[k].length; z++) {
+									//alert(this.corridors[k][z].X);
+									if ((this.corridors[k][z].X === x && this.corridors[k][z].Y === y)) {
+											flgDrawBg = false;
+											output += "*";
+									}
+								}
+								//alert(this.corridors[k][0].X);
+							}
+						}
+						
+                        if (flgDrawBg) {
+                            output += "&nbsp;";
+                            //output += ".";
+                        }
+                    }
+                    output += "|" + x + "<br />";
+                }
+                output += "|";
+                for (var y = 0; y < this.Y; y++) {
+                    output += "-";
+                }
+                output += "|<br />";
+                document.getElementById('divOutput').innerHTML = output;
+				
+                document.getElementById('divPlayer').innerHTML = player.PrintPlayerStats();
+                document.getElementById('divCombat').innerHTML = player.PrintCombatStats();
+            }
+        }
+
+		var player = {
+            X: 0,
+            Y: 0,
+			HP: 100,
+			MP: 100,
+			STR: 10,
+			MAG: 10,
+			DEX: 10,
+			ARM: 0,
+			XP: 0,
+			LEV: 1,
+			isFighting: false,
+			monsterInCombat: 0,
+			combatMessage: "",
+            initialize: function() {
+				this.X = playfield.rooms[2].topLVertexX + 1;
+				this.Y = playfield.rooms[2].topLVertexY + 1;
+            },
+            PrintCurrentPos: function () {
+                alert("current X=" + this.currentX + ",current Y=" + this.currentY);
+            },
+			PrintPlayerStats: function () {
+				return "&nbsp;HP=" + player.HP + " - MP=" + player.MP + " - XP=" + player.XP + " - LEV=" + player.LEV + " - STR=" + player.STR + " - MAG=" + player.MAG + " - DEX=" + player.DEX + " - ARM=" + player.ARM + " (wasd to move, 'h' to hit enemy)";
+			},
+			PrintCombatStats: function () {
+				if (this.isFighting == true) {
+					return "&nbsp;Fighting a " + playfield.monsters[player.monsterInCombat].descr + " ... " + player.combatMessage;
+				} else {
+					return "&nbsp;";
+				}
+			}
+
+        }    
+        
+        // initialize game and playfield
+        playfield.initialize();
+        playfield.draw();
+        //document.getElementById('kInput').onkeypress = khandle;
+        
+        // attach keyboard handler
+        document.onkeypress = khandle;
+        
+		/*
+        // game loop
+        setInterval(function () {
+            if (!UPDATING) {
+                updatePlayfield();
+                playfield.draw();
+            }
+        }, GAME_SPEED);
+		*/
+    </script>
+  </body>
+</html>

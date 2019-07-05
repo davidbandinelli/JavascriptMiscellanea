@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SNK</title>
+    <style>
+        body {
+        font-family: "Courier New", Courier, monospace;
+        } 
+    </style>
+  </head>
+  <body>
+  <!-- canvas id="myCanvasTag" width="400" height="400" style="background-color:blue;border: 10px yellow solid"></canvas -->
+    
+    <div id="divOutput"></div>
+    <br/>
+    <div id="divScore"></div><br />
+    <!-- input type="text" id="kInput" -->
+    <script type="text/javascript">
+        // ----------------------------------------------------------
+        // --------------- Javascript snake -------------------------
+        // --------------- by pupazzo1972   -------------------------
+        // ----------------------------------------------------------
+        var INCREASE_LENGTH = 5;
+        var INITIAL_LENGTH = 5;
+        var GAME_SPEED = 100;
+        var UPDATING = false;
+        var PAUSE = false;
+        // R (&#9658;) L (&#9668;) U (&#9650;) D (&#9660;), mushroom (&#1f344)
+        // helper functions
+        function random(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        
+        // event.type must be keypress
+        function getChar(event) {
+            if (event.which == null) {
+                return String.fromCharCode(event.keyCode) // IE
+            } else if (event.which != 0 && event.charCode != 0) {
+                return String.fromCharCode(event.which)   // the rest
+            } else {
+                return null // special key
+            }
+        }
+        // helper functions
+        
+        function print_debug() {
+            cmdQueue.commands.forEach(function(item) {
+                if (item.orientation != undefined) {
+                    console.log("change dir to " + item.orientation + " at X=" + item.X + ",Y=" + item.Y + ",SEGM=" + item.nrSegments);
+                }
+            });
+        }
+        
+        function khandle(e) {
+            //if (!UPDATING) {
+                var keyPressed = getChar(e);
+                //alert(keyPressed);
+                switch (keyPressed) {
+                    case 'w':
+                        updatePlayfield("U");
+                        break;
+                    case 's':
+                        updatePlayfield("D");
+                        break;
+                    case 'a':
+                        updatePlayfield("L");
+                        break;
+                    case 'd':
+                        updatePlayfield("R");
+                        break;
+                    case 'p':
+                        if (PAUSE == true) {
+                            UPDATING = false;
+                            PAUSE = false;
+                        }
+                        if (PAUSE == false) {
+                            UPDATING = true;
+                            PAUSE = true;
+                            print_debug();
+                        }
+                        break;
+                }
+                removeCompletedCommands();
+                playfield.draw();
+            //}
+        }
+
+        // remove commands from queue when all segments are handled
+        function removeCompletedCommands() {
+            var newCmdList = [];
+            cmdQueue.commands.forEach(function(item, k) {
+                if (item.nrSegments > 0 && item.nrSegments != undefined && item.orientation != undefined) {
+                    //console.log("command " + item.orientation + " at X=" + item.X + ",Y=" + item.Y + " must be maintained");
+                    newCmdList.push(cmdQueue.commands[k]); 
+                }
+            });
+            cmdQueue.commands = newCmdList;
+        }
+        
+        function SetMushroomPos() {
+            var flgPosBad = true;
+            
+            while (flgPosBad) {
+                flgPosBad = false;
+                mshRm.X = random(1, playfield.X - 1);
+                mshRm.Y = random(1, playfield.Y - 1);
+                for (var i = 0; i < snk.currentLength; i++) {
+                    if (snk.segments[i].X == mshRm.X && snk.segments[i].Y == mshRm.Y) {
+                        flgPosBad = true;
+                    }
+                }
+            }
+            //alert(mshRm.X + " - " + mshRm.Y);
+        }
+        
+        function updatePlayfield(direction) {
+            UPDATING = true;
+            
+            // update mushroom pos and increase snake length
+            // TODO length out of bound and length in front of head causing game over without redraw
+            if (playfield.gnam) {
+                var tailX = 0, tailY = 0, tailDir = "";
+                tailX = snk.segments[snk.currentLength - 1].X;
+                tailY = snk.segments[snk.currentLength - 1].Y;
+                tailDir = snk.segments[snk.currentLength - 1].orientation;
+
+                for (var i = 0; i < INCREASE_LENGTH; i++) {
+                    switch (tailDir) {
+                        case "U":
+                            snk.segments.push({ orientation: tailDir, X: tailX + (i + 1), Y: tailY });
+                            break;
+                        case "D":
+                            snk.segments.push({ orientation: tailDir, X: tailX - (i + 1), Y: tailY });
+                            break;
+                        case "L":
+                            snk.segments.push({ orientation: tailDir, X: tailX, Y: tailY + (i + 1) });
+                            break;
+                        case "R":
+                            snk.segments.push({ orientation: tailDir, X: tailX, Y: tailY - (i + 1) });
+                            break;
+                    }
+                }
+                snk.currentLength += INCREASE_LENGTH;
+                
+                // add segments to previous commands (only if segment has to pass on command)
+                cmdQueue.commands.forEach(function(item, k) {
+                    if (item.nrSegments != 0 && item.nrSegments != undefined) {
+                        cmdQueue.commands[k].nrSegments += INCREASE_LENGTH;
+                    }
+                });
+                
+                // slightly increase difficulty after each "lunch"
+                //INCREASE_LENGTH += 1;
+                GAME_SPEED -= 5;
+                if (GAME_SPEED <= 5) {
+                    GAME_SPEED = 5;
+                }
+                
+                // reset mushroom
+                SetMushroomPos();
+                playfield.gnam = false;
+                playfield.drawMushroom = true;
+            }
+            
+            // invalid moves (i.e. L can only transition to U or D, U can only transition to L, R)
+            switch (snk.dir) {
+                case "U":
+                    if (direction == "D") {
+                        UPDATING = false;
+                        return;
+                        }
+                    break;
+                case "D":
+                    if (direction == "U") {
+                        UPDATING = false;
+                        return;
+                        }
+                    break;
+                case "L":
+                    if (direction == "R") {
+                        UPDATING = false; 
+                        return;
+                        }
+                    break;
+                case "R":
+                    if (direction == "L") {
+                        UPDATING = false;
+                        return;
+                        }
+                    break;
+            }
+            
+            //console.log("snk dir= " + snk.dir);
+            //console.log("head coord X=" + snk.segments[0].X + ",Y=" + snk.segments[0].Y);
+            var prevDir = snk.dir;
+            var prevX = snk.segments[0].X;
+            var prevY = snk.segments[0].Y;
+            var validDir = false;
+            switch (direction) {
+                case "U":
+                    validDir = true;
+                    snk.segments[0].X = snk.segments[0].X - 1;
+                    break;
+                case "D":
+                    validDir = true;
+                    snk.segments[0].X = snk.segments[0].X + 1;
+                    break;
+                case "L":
+                    validDir = true;
+                    snk.segments[0].Y = snk.segments[0].Y - 1;
+                    break;
+                case "R":
+                    validDir = true;
+                    snk.segments[0].Y = snk.segments[0].Y + 1;
+                    break;
+            }
+            // boundary check
+            var outOfBound = false;
+            if (snk.segments[0].Y < 0) {
+                snk.segments[0].Y = 0;
+                outOfBound = true;
+            }
+            if (snk.segments[0].X < 0) {
+                snk.segments[0].X = 0;
+                outOfBound = true;
+            }
+            if (snk.segments[0].Y >= playfield.Y) {
+                snk.segments[0].Y = playfield.Y - 1;
+                outOfBound = true;
+            }
+            if (snk.segments[0].X >= playfield.X) {
+                snk.segments[0].X = playfield.X - 1;
+                outOfBound = true;
+            }
+            if (outOfBound) {
+                //console.log("OUT-OF-BOUND head coord X=" + snk.segments[0].X + ",Y=" + snk.segments[0].Y);
+            }
+            
+            // push valid command to command array
+            if (validDir && !outOfBound) {
+                if (direction != snk.dir) {
+                    cmdQueue.commands.push({ orientation: direction, nrSegments: snk.currentLength - 1, X: prevX, Y: prevY });
+                    snk.dir = direction;
+                    snk.segments[0].orientation = direction;
+                }
+            }
+
+            // --- DEBUG ---
+            /*
+            cmdQueue.commands.forEach(function(item) {
+                if (item.orientation != undefined && !outOfBound) {
+                    console.log("change dir to " + item.orientation + " at X=" + item.X + ",Y=" + item.Y);
+                }
+            });
+            */
+            // --- DEBUG ---
+            
+            // movement of each segment (after head)
+            if (!outOfBound) {
+                for (var i = 1; i < snk.currentLength; i++) {
+                    var findCmd = false;
+
+                    // first move, then check possible orientation change
+                    switch (snk.segments[i].orientation) {
+                        case "U":
+                            snk.segments[i].X = snk.segments[i].X - 1;
+                            break;
+                        case "D":
+                            snk.segments[i].X = snk.segments[i].X + 1;
+                            break;
+                        case "L":
+                            snk.segments[i].Y = snk.segments[i].Y - 1;
+                            break;
+                        case "R":
+                            snk.segments[i].Y = snk.segments[i].Y + 1;
+                            break;
+                    }
+                    cmdQueue.commands.forEach(function(item, k) {
+                        if (item.orientation != undefined && snk.segments[i].X == item.X && snk.segments[i].Y == item.Y && item.nrSegments > 0) {
+                            //console.log("change segm dir to " + item.orientation + " at X=" + item.X + ",Y=" + item.Y);
+                            snk.segments[i].orientation = item.orientation;
+                            cmdQueue.commands[k].nrSegments--;
+                        }
+                    });
+                }
+            }
+            // check collision
+            var flgCollision = false;
+            for (var i = 1; i < snk.currentLength; i++) {
+                if (snk.segments[0].X == snk.segments[i].X && snk.segments[0].Y == snk.segments[i].Y) {
+                    // collision detected
+                    alert("GAME OVER - final score:" + playfield.score);
+                    //window.location.href = "file:///C:/david/corsi/html_css/bootstrap/test/snake.html";
+                    window.location.href = "http://www.davidbandinelli.it/progetti/snake.html";
+                }
+            }
+            
+            //DEBUG
+            for (var i = 0; i < snk.currentLength; i++) {
+                if ((Math.abs(snk.segments[0].X - snk.segments[1].X) > 1) || (Math.abs(snk.segments[0].Y - snk.segments[1].Y) > 1) ) {
+                    print_debug();
+                    return;
+                }
+            }
+            //DEBUG
+            UPDATING = false;
+        }
+        
+        var mshRm = {
+            X: 0,
+            Y: 0
+        }
+        
+        var cmdQueue = {
+            commands: [
+                {
+                    /*
+                    orientation: 'U',
+                    nrSegments: 0,
+                    X: 0,
+                    Y: 0
+                    */
+                }
+            ]
+        }
+        
+        var snk = {
+            currentLength: 0,
+            currentX: 0,
+            currentY: 0,
+            dir: 'L',
+            segments: [
+                // body array here
+            ],
+            PrintCurrentPos: function () {
+                alert("current X=" + this.currentX + ",current Y=" + this.currentY);
+            },
+            PrintHeadPos: function () {
+                alert("head X=" + this.segments[0].X + ",head Y=" + this.segments[0].Y + ",orientation=" + this.segments[0].orientation);
+            }
+        }    
+        //snk.PrintCurrentPos();
+        //snk.PrintHeadPos();
+        
+        var playfield = {
+            score: 0,
+            X: 24,
+            Y: 64,
+            drawMushroom: false,
+            gnam: false,
+            initialize: function() {
+                SetMushroomPos();
+                
+                snk.currentLength = INITIAL_LENGTH;
+                snk.currentX = 12;
+                snk.currentY = this.Y / 2;
+                snk.dir = 'L';
+                snk.segments.push({ orientation: 'L', X: snk.currentX, Y: snk.currentY });
+                snk.segments.push({ orientation: 'L', X: snk.currentX, Y: snk.currentY + 1 });
+                snk.segments.push({ orientation: 'L', X: snk.currentX, Y: snk.currentY + 2 });
+                snk.segments.push({ orientation: 'L', X: snk.currentX, Y: snk.currentY + 3 });
+                snk.segments.push({ orientation: 'L', X: snk.currentX, Y: snk.currentY + 4 });
+                
+                this.drawMushroom = true;
+            },
+            draw: function() {
+                var output = "";
+                output += "|";
+                for (var y = 0; y < this.Y; y++) {
+                    output += "-";
+                }
+                output += "|<br />";
+                for (var x = 0; x < this.X; x++) {
+                    output += "|";
+                    for (var y = 0; y < this.Y; y++) {
+                        // draw the snake or border
+                        var flgDrawBorder = true;
+                        for (var i = 0; i < snk.currentLength; i++) {
+                            //if ((x == snk.segments[i].X && y == snk.segments[i].Y) && (x != mshRm.X && y != mshRm.Y)) {
+                            if ((x == snk.segments[i].X && y == snk.segments[i].Y)) {
+                                if (snk.segments[i].X != mshRm.X || snk.segments[i].Y != mshRm.Y) {
+                                    flgDrawBorder = false;
+                                    // switch case orientation
+                                    switch (snk.segments[i].orientation) {
+                                        case 'L':
+                                            output += "&#9668;";
+                                            break;
+                                        case 'R':
+                                            output += "&#9658;";
+                                            break;
+                                        case 'U':
+                                            output += "&#9650;";
+                                            break;
+                                        case 'D':
+                                            output += "&#9660;";
+                                            break;
+                                    }
+                                    //playfield.score += 1;
+                                }
+                                else {
+                                    if (snk.segments[i].X == mshRm.X && snk.segments[i].Y == mshRm.Y && i == 0) {
+                                        flgDrawBorder = false;
+                                        output += "G"; // gnam
+                                        this.drawMushroom = false;
+                                        this.gnam = true;
+                                        mshRm.X = -1;
+                                        mshRm.Y = -1;
+                                        playfield.score += (10 * snk.currentLength) ;
+                                    }
+                                }
+                            }
+                            else {
+                            }
+                        }
+                        // draw the mushroom
+                        if (x == mshRm.X && y == mshRm.Y && this.drawMushroom) {
+                            flgDrawBorder = false;
+                            //output += "&#127812";
+                            //output += "&#9731";
+                            output += "*";
+                        } 
+                        if (flgDrawBorder) {
+                            output += ".";
+                        }
+                    }
+                    output += "|" + x + "<br />";
+                }
+                output += "|";
+                for (var y = 0; y < this.Y; y++) {
+                    output += "-";
+                }
+                output += "|<br />";
+                document.getElementById('divOutput').innerHTML = output;
+                var outputScore = "score=" + this.score;
+                document.getElementById('divScore').innerHTML = outputScore;
+            }
+        }
+        
+        // initialize game and playfield
+        playfield.initialize();
+        playfield.draw();
+        //document.getElementById('kInput').onkeypress = khandle;
+        
+        // attach keyboard handler
+        document.onkeypress = khandle;
+        
+        // game loop
+        setInterval(function () {
+            if (!UPDATING) {
+                updatePlayfield(snk.dir);
+                playfield.draw();
+            }
+        }, GAME_SPEED);
+    </script>
+  </body>
+</html>

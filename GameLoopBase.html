@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SNK</title>
+    <style>
+        body {
+        font-family: "Courier New", Courier, monospace;
+        } 
+    </style>
+  </head>
+  <body>
+  <!-- canvas id="myCanvasTag" width="400" height="400" style="background-color:blue;border: 10px yellow solid"></canvas -->
+    
+    <div id="divOutput"></div>
+    <br/>
+    <div id="divScore"></div><br />
+    <!-- input type="text" id="kInput" -->
+    <script type="text/javascript">
+        // ----------------------------------------------------------
+        // --------------- Javascript RogueLike ---------------------
+        // --------------- by pupazzo1972   -------------------------
+        // ----------------------------------------------------------
+        var UPDATING = false;
+        var PAUSE = false;
+		var GAME_SPEED = 100;
+        // R (&#9658;) L (&#9668;) U (&#9650;) D (&#9660;), mushroom (&#1f344)
+        // helper functions
+        function random(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        
+        // event.type must be keypress
+        function getChar(event) {
+            if (event.which == null) {
+                return String.fromCharCode(event.keyCode) // IE
+            } else if (event.which != 0 && event.charCode != 0) {
+                return String.fromCharCode(event.which)   // the rest
+            } else {
+                return null // special key
+            }
+        }
+        // helper functions
+        
+        function print_debug() {
+            cmdQueue.commands.forEach(function(item) {
+                if (item.orientation != undefined) {
+                    console.log("change dir to " + item.orientation + " at X=" + item.X + ",Y=" + item.Y + ",SEGM=" + item.nrSegments);
+                }
+            });
+        }
+        
+        function khandle(e) {
+			var keyPressed = getChar(e);
+			//alert(keyPressed);
+			switch (keyPressed) {
+				case 'w':
+					updatePlayfield("U");
+					break;
+				case 's':
+					updatePlayfield("D");
+					break;
+				case 'a':
+					updatePlayfield("L");
+					break;
+				case 'd':
+					updatePlayfield("R");
+					break;
+				case 'p':
+					if (PAUSE == true) {
+						UPDATING = false;
+						PAUSE = false;
+					}
+					if (PAUSE == false) {
+						UPDATING = true;
+						PAUSE = true;
+						print_debug();
+					}
+					break;
+			}
+			playfield.draw();
+        }
+        
+        function updatePlayfield(direction) {
+            UPDATING = true;
+			var prevX = player.X;
+            var prevY = player.Y;
+            switch (direction) {
+                case "U":
+                    validDir = true;
+                    player.X = player.X - 1;
+                    break;
+                case "D":
+                    validDir = true;
+                    player.X = player.X + 1;
+                    break;
+                case "L":
+                    validDir = true;
+                    player.Y = player.Y - 1;
+                    break;
+                case "R":
+                    validDir = true;
+                    player.Y = player.Y + 1;
+                    break;
+            }
+            // boundary check
+            var outOfBound = false;
+            if (player.Y < 0) {
+                player.Y = 0;
+                outOfBound = true;
+            }
+            if (player.X < 0) {
+                player.X = 0;
+                outOfBound = true;
+            }
+            if (player.Y >= playfield.Y) {
+                player.Y = playfield.Y - 1;
+                outOfBound = true;
+            }
+            if (player.X >= playfield.X) {
+                player.X = playfield.X - 1;
+                outOfBound = true;
+            }
+            if (outOfBound) {
+                //console.log("OUT-OF-BOUND head coord X=" + snk.segments[0].X + ",Y=" + snk.segments[0].Y);
+            }
+            
+            // check collision
+            var flgCollision = false;
+
+            //DEBUG
+            UPDATING = false;
+        }
+        
+        var playfield = {
+            score: 0,
+            X: 48,
+            Y: 128,
+            initialize: function() {
+            },
+            draw: function() {
+                var output = "";
+                output += "|";
+                for (var y = 0; y < this.Y; y++) {
+                    output += "-";
+                }
+                output += "|<br />";
+                for (var x = 0; x < this.X; x++) {
+                    output += "|";
+                    for (var y = 0; y < this.Y; y++) {
+                        // draw the background or object
+                        var flgDrawBg = true;
+						if ((x == player.X && y == player.Y)) {
+							flgDrawBg = false;
+							output += "P";
+						}
+                        if (flgDrawBg) {
+                            output += ".";
+                        }
+                    }
+                    output += "|" + x + "<br />";
+                }
+                output += "|";
+                for (var y = 0; y < this.Y; y++) {
+                    output += "-";
+                }
+                output += "|<br />";
+                document.getElementById('divOutput').innerHTML = output;
+                var outputScore = "score=" + this.score;
+                document.getElementById('divScore').innerHTML = outputScore;
+            }
+        }
+
+		var player = {
+            X: playfield.X / 2,
+            Y: playfield.Y / 2,
+            PrintCurrentPos: function () {
+                alert("current X=" + this.currentX + ",current Y=" + this.currentY);
+            }
+        }    
+        
+        // initialize game and playfield
+        playfield.initialize();
+        playfield.draw();
+        //document.getElementById('kInput').onkeypress = khandle;
+        
+        // attach keyboard handler
+        document.onkeypress = khandle;
+        
+        // game loop
+        setInterval(function () {
+            if (!UPDATING) {
+                updatePlayfield();
+                playfield.draw();
+            }
+        }, GAME_SPEED);
+    </script>
+  </body>
+</html>
